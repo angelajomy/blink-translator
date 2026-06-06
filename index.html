@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blinkly - AI Morse & Gesture Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <div class="eye-icon"></div>
+                <h1>Blinkly</h1>
+            </div>
+            <p class="subtitle">AI-Powered Hands-Free Communication</p>
+        </header>
+
+        <main>
+            <div id="action-log" class="action-log">Ready</div>
+            <div class="video-section glass-panel">
+                <div class="video-wrapper">
+                    <!-- The webcam feed -->
+                    <video id="webcam" autoplay playsinline></video>
+                    <!-- Canvas for drawing overlays (like blink feedback) -->
+                    <canvas id="output_canvas"></canvas>
+                    
+                    <div class="camera-overlay" id="loading-overlay" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Initializing Camera & AI...</p>
+                    </div>
+                    <div class="camera-overlay" id="start-overlay">
+                        <p>Camera is paused. Start to begin.</p>
+                    </div>
+                </div>
+                <div class="controls">
+                    <button id="camera-btn" class="btn primary">Start Camera</button>
+                    <button id="calibrate-btn" class="btn secondary" disabled>Calibrate Face</button>
+                    <button id="train-lab-btn" class="btn secondary" disabled>🧠 Training Lab</button>
+                    <button id="settings-btn" class="btn secondary">⚙️ Settings</button>
+                    <button id="clear-btn" class="btn secondary" style="background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4);">Clear Text</button>
+                </div>
+            </div>
+
+            <div class="data-section glass-panel">
+                <div class="stat-card">
+                    <h3>Current Sequence</h3>
+                    <div class="morse-display" id="morse-display">
+                        <span class="placeholder">Awaiting blink...</span>
+                    </div>
+                </div>
+
+                <!-- AI Predictions Section -->
+                <div class="stat-card ai-predictions-card">
+                    <div class="ai-predictions-header">
+                        <h3>AI Word Predictions</h3>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <span class="ai-badge" id="classifier-status-badge" style="color: var(--text-muted); border-color: rgba(156, 163, 175, 0.25); background: rgba(156, 163, 175, 0.05);">
+                                <span id="classifier-status-text">ML: Off</span>
+                            </span>
+                            <span class="ai-badge" id="ai-status">
+                                <span class="pulse-dot"></span>
+                                <span id="ai-status-text">Cloud Engine</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="prediction-bar" id="prediction-bar">
+                        <div class="prediction-pill active" id="pred-0" data-index="0">
+                            <span class="shortcut">1</span>
+                            <span class="word">...</span>
+                        </div>
+                        <div class="prediction-pill" id="pred-1" data-index="1">
+                            <span class="shortcut">2</span>
+                            <span class="word">...</span>
+                        </div>
+                        <div class="prediction-pill" id="pred-2" data-index="2">
+                            <span class="shortcut">3</span>
+                            <span class="word">...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <h3>Translated Text</h3>
+                    <div class="text-display" id="text-display"></div>
+                </div>
+
+                <!-- New: History Log section -->
+                <div class="stat-card history-section">
+                    <div class="history-header">
+                        <h3>Conversation History</h3>
+                        <button id="export-btn" class="btn secondary small">📥 Export .txt</button>
+                    </div>
+                    <div id="history-log" class="history-content">
+                        <!-- Sentences will pile up here -->
+                    </div>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric-box">
+                        <span class="label">Total Blinks</span>
+                        <span class="value" id="blinks-val">0</span>
+                    </div>
+                    <div class="metric-box">
+                        <span class="label">Valid Blinks</span>
+                        <span class="value" id="valid-val">0</span>
+                    </div>
+                    <div class="metric-box">
+                        <span class="label">Accuracy</span>
+                        <span class="value highlight" id="accuracy-val">100%</span>
+                    </div>
+                </div>
+                
+                <div class="instructions">
+                    <h4>How it works:</h4>
+                    <ul>
+                        <li><span class="dot-dash">.</span> Short blink (&lt; 0.4s)</li>
+                        <li><span class="dot-dash">-</span> Long blink (&gt; 0.4s)</li>
+                        <li>Pause 1.5s to complete letter</li>
+                        <li>Pause 3.0s to complete word</li>
+                    </ul>
+                </div>
+            </div>
+        </main>
+
+        <!-- New: Morse Code Dictionary Window -->
+        <section class="reference-section glass-panel">
+            <h2>Morse Code Reference Guide</h2>
+            <div class="morse-grid" id="morse-grid">
+                <!-- Dynamically populated by JavaScript -->
+            </div>
+        </section>
+    </div>
+
+    <!-- MediaPipe Libraries from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    
+    <!-- New: Settings Modal Overlay -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-content glass-panel">
+            <h2>System Settings</h2>
+            
+            <div class="setting-group">
+                <label>Blink Speed (Dot Threshold)</label>
+                <div class="slider-box">
+                    <input type="range" id="dot-slider" min="0.1" max="1.0" step="0.05" value="0.4">
+                    <span id="dot-val">0.40s</span>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label>Letter Pause Delay</label>
+                <div class="slider-box">
+                    <input type="range" id="letter-slider" min="0.5" max="3.0" step="0.1" value="1.3">
+                    <span id="letter-val">1.3s</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Audio Master Volume</label>
+                <div class="slider-box">
+                    <input type="range" id="vol-slider" min="0" max="0.5" step="0.01" value="0.1">
+                    <span id="vol-val">20%</span>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label>Speech Rate (TTS)</label>
+                <div class="slider-box">
+                    <input type="range" id="rate-slider" min="0.5" max="2.0" step="0.1" value="0.95">
+                    <span id="rate-val">0.95x</span>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label>Audio Waveform Tone</label>
+                <div class="select-box">
+                    <select id="osc-type">
+                        <option value="sine" selected>Sine (Soft Ping)</option>
+                        <option value="triangle">Triangle (Smooth Tone)</option>
+                        <option value="square">Square (Retro Synth)</option>
+                        <option value="sawtooth">Sawtooth (Buzz Beep)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label>Text-To-Speech Voice</label>
+                <div class="select-box">
+                    <select id="voice-select">
+                        <option value="" selected>System Default Voice</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="setting-group checkbox-group">
+                <label class="toggle-container">
+                    <input type="checkbox" id="ai-mode-toggle" checked>
+                    <span class="checkmark"></span>
+                    Enable Online AI (Datamuse API)
+                </label>
+            </div>
+
+            <div class="setting-group checkbox-group">
+                <label class="toggle-container">
+                    <input type="checkbox" id="ml-classifier-toggle">
+                    <span class="checkmark"></span>
+                    Use AI Blink Classifier (k-NN)
+                </label>
+            </div>
+
+            <div class="setting-group checkbox-group">
+                <label class="toggle-container">
+                    <input type="checkbox" id="landmark-toggle" checked>
+                    <span class="checkmark"></span>
+                    Draw Eye & Face Tracking Points
+                </label>
+            </div>
+
+            <button id="close-settings-btn" class="btn primary">Save & Close</button>
+        </div>
+    </div>
+
+    <!-- AI Training Lab Modal Wizard -->
+    <div id="training-modal" class="modal hidden">
+        <div class="modal-content glass-panel training-modal-content">
+            <h2>🧠 AI Blink Training Lab</h2>
+            <p class="training-desc">Record custom datasets of natural eye blinks vs. intentional Morse dot/dash inputs to train a personalized machine learning classifier (k-NN) running fully local in your browser.</p>
+            
+            <div class="training-grid-layout">
+                <!-- Training Steps -->
+                <div class="training-steps-column">
+                    <!-- Step 0: Natural Blinks -->
+                    <div class="training-step-card active" id="step-card-0" data-class="0">
+                        <div class="step-card-header">
+                            <span class="class-label label-reflex">Class 0</span>
+                            <h4>Reflex Blinks</h4>
+                        </div>
+                        <p class="step-card-desc">Relax, look at the camera, and blink naturally as you read or wait. (Need 10 reflex samples)</p>
+                        <div class="step-progress-row">
+                            <div class="step-progress-track">
+                                <div class="step-progress-bar" id="progress-0" style="width: 0%"></div>
+                            </div>
+                            <span class="step-progress-count" id="progress-text-0">0 / 10</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 1: Intentional Dots -->
+                    <div class="training-step-card" id="step-card-1" data-class="1">
+                        <div class="step-card-header">
+                            <span class="class-label label-dot">Class 1</span>
+                            <h4>Intentional Dots</h4>
+                        </div>
+                        <p class="step-card-desc">Perform short, deliberate blinks (quick, intentional closures). (Need 10 dot samples)</p>
+                        <div class="step-progress-row">
+                            <div class="step-progress-track">
+                                <div class="step-progress-bar" id="progress-1" style="width: 0%"></div>
+                            </div>
+                            <span class="step-progress-count" id="progress-text-1">0 / 10</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 2: Intentional Dashes -->
+                    <div class="training-step-card" id="step-card-2" data-class="2">
+                        <div class="step-card-header">
+                            <span class="class-label label-dash">Class 2</span>
+                            <h4>Intentional Dashes</h4>
+                        </div>
+                        <p class="step-card-desc">Perform long, deliberate blinks (hold eyes closed for ~0.5s before opening). (Need 10 dash samples)</p>
+                        <div class="step-progress-row">
+                            <div class="step-progress-track">
+                                <div class="step-progress-bar" id="progress-2" style="width: 0%"></div>
+                            </div>
+                            <span class="step-progress-count" id="progress-text-2">0 / 10</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Dataset Visual Plot -->
+                <div class="training-plot-card">
+                    <h4>Custom Dataset Scatter Plot</h4>
+                    <span class="plot-subtitle">Visualizing Duration (X-axis) vs. Depth (Y-axis)</span>
+                    <div class="canvas-plot-container">
+                        <canvas id="training_canvas"></canvas>
+                    </div>
+                    <div class="plot-legend">
+                        <span class="legend-indicator"><span class="indicator-color color-reflex"></span>Reflex</span>
+                        <span class="legend-indicator"><span class="indicator-color color-dot"></span>Dot</span>
+                        <span class="legend-indicator"><span class="indicator-color color-dash"></span>Dash</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Training status log -->
+            <div class="training-feedback-panel">
+                <div class="feedback-status-row">
+                    <span>Dataset Status:</span>
+                    <strong id="dataset-status" class="status-warning">Untrained (Need 5+ samples each)</strong>
+                </div>
+                <div class="feedback-console" id="training-console">
+                    Training lab initialized. Choose a class below to begin recording...
+                </div>
+            </div>
+            
+            <div class="training-controls">
+                <button id="select-class-0" class="btn secondary active">Record Class 0 (Reflex)</button>
+                <button id="select-class-1" class="btn secondary">Record Class 1 (Dot)</button>
+                <button id="select-class-2" class="btn secondary">Record Class 2 (Dash)</button>
+            </div>
+            
+            <div class="training-action-footer">
+                <button id="reset-dataset-btn" class="btn secondary" style="background: rgba(244, 63, 94, 0.1); border-color: rgba(244, 63, 94, 0.2); color: var(--danger);">Reset Data</button>
+                <button id="train-model-btn" class="btn primary" disabled>Train & Activate Classifier</button>
+                <button id="close-training-btn" class="btn secondary">Close Lab</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script src="script.js"></script>
+</body>
+</html>
